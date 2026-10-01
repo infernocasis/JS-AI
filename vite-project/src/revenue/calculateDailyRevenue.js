@@ -21,32 +21,39 @@ function assertSourcesShape(orderData, cashPayments) {
   }
 }
 
-function normalizeTransaction({ amount, currency }, index) {
-  const context = `transactions[${index}]`;
-  return {
-    amount: validateAmount(amount, context),
-    currency: normalizeCurrency(currency, context),
-  };
+/** Прибавляет сумму к накопителю своей валюты */
+function addPayment(centsByCurrency, { amount, currency }) {
+  centsByCurrency.set(
+    currency,
+    (centsByCurrency.get(currency) ?? 0) + toCents(amount),
+  );
 }
 
 /**
  * Чистая функция: считает выручку отдельно по каждой валюте.
+ * Один проход по каждому источнику, без промежуточных массивов.
  * Возвращает [{ total, currency }, ...]; пустой массив, если оплат нет.
  */
 export function calculateDailyRevenue(orderData, cashPayments) {
   assertSourcesShape(orderData, cashPayments);
 
-  const paidTransactions = orderData.transactions
-    .map((transaction, index) => ({ transaction, index }))
-    .filter(({ transaction }) => transaction?.type === "paid")
-    .map(({ transaction, index }) => normalizeTransaction(transaction, index));
+  const centsByCurrency = new Map();
 
-  const payments = [...paidTransactions, ...cashPayments.map(parseMoneyString)];
+  // Источник 1: берём только paid, остальные пропускаем без валидации
+  orderData.transactions.forEach((transaction, index) => {
+    if (transaction?.type !== "paid") return;
 
-  const centsByCurrency = payments.reduce((acc, { amount, currency }) => {
-    acc.set(currency, (acc.get(currency) ?? 0) + toCents(amount));
-    return acc;
-  }, new Map());
+    const context = `transactions[${index}]`;
+    addPayment(centsByCurrency, {
+      amount: validateAmount(transaction.amount, context),
+      currency: normalizeCurrency(transaction.currency, context),
+    });
+  });
+
+  // Источник 2: каждая строка "300 USD" — оплата
+  cashPayments.forEach((value, index) => {
+    addPayment(centsByCurrency, parseMoneyString(value, index));
+  });
 
   return Array.from(centsByCurrency, ([currency, cents]) => ({
     total: fromCents(cents),
