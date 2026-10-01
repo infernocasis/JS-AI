@@ -1,15 +1,18 @@
 /**
- * Конвертация суммы в центах через базовую валюту курсов.
- * rates[X] = сколько X дают за 1 единицу base.
- * from -> base: делим на rates[from]; base -> to: умножаем на rates[to].
+ * Курс from -> to через базовую валюту провайдера.
+ * rates[X] = сколько X дают за 1 единицу base, поэтому 1 from = rates[to] / rates[from] to.
  */
-export function convertCents(cents, from, to, { base, rates }) {
-  if (from === to) return cents;
+export function getRate(from, to, { base, rates }) {
+  if (from === to) return 1;
 
   const fromRate = rates[from];
   const toRate = rates[to];
   if (!fromRate) throw new Error(`No exchange rate for ${from} (base ${base})`);
   if (!toRate) throw new Error(`No exchange rate for ${to} (base ${base})`);
 
-  return Math.round((cents * toRate) / fromRate);
+  return toRate / fromRate;
+}
+
+export function convertCents(cents, from, to, exchangeRates) {
+  return Math.round(cents * getRate(from, to, exchangeRates));
 }
